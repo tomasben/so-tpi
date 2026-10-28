@@ -1,19 +1,23 @@
 import pprint
 import random
-from typing import Self
+from collections.abc import Iterator
+from itertools import count
+from typing import ClassVar, Self
 
 
 class Process:
-    def __init__(self, id: int, burst_time: int) -> None:
-        self.id = id
-        self.burst_time = burst_time
-        self.remaining_time = burst_time
+    _id: ClassVar[Iterator[int]] = count(start=1)
+
+    def __init__(self, burst_time: int) -> None:
+        self.id: int = next(self._id)
+        self.burst_time: int = burst_time
+        self.remaining_time: int = burst_time
 
 
     @classmethod
     def random(cls, count: int) -> list[Self]:
         instances: list[Self] = [
-            cls(id=i, burst_time=random.randint(1, 15))
+            cls(burst_time=random.randint(1, 15))
             for i in range(count)
         ]
 
