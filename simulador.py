@@ -138,6 +138,25 @@ class Memory:
         self.size: int = size
         self.partitions: list[Partition] = []
 
+    def allocate(self, proc: Process) -> Partition | None:
+        candidates = self._get_candidates(proc.size)
+
+        if candidates:
+            best_gap = min(candidates, key=lambda gap: gap.size)
+            new_part = Partition(next(self._number), best_gap.base, proc)
+            self.partitions.insert(best_gap.index, new_part)
+            return new_part
+
+        return None
+
+    def free(self, proc_id: int) -> Partition | None:
+        for part in self.partitions:
+            if part.proc_id == proc_id:
+                self.partitions.remove(part)
+                return part
+
+        return None
+
     def _get_candidates(self, required: int) -> list[Gap]:
         candidates: list[Gap] = []
 
