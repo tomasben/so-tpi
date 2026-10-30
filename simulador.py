@@ -6,11 +6,13 @@ from itertools import count
 from random import randint
 from typing import ClassVar, Self
 
+MAX_MULTIPROGRAMMING = 5
+
 
 class ProcessState(Enum):
     NEW = "new"
     READY = "ready"
-    READY_SUSPENDED = "ready and suspended"
+    SUSPENDED = "ready/suspended"
     RUNNING = "running"
     FINISHED = "finished"
 
@@ -48,11 +50,17 @@ class Process:
 
 class Scheduler:
     def __init__(self):
+        self.new_queue: list[Process] = []
         self.ready_queue: list[Process] = []
+        self.suspended_queue: list[Process] = []
         self.executing: Process | None = None
 
-    def asign(self, asignee: list[Process]) -> None:
-        self.ready_queue.extend(asignee)
+    @property
+    def mult_degree(self) -> int:
+        """Devuelve la cantidad de procesos en cola de listos, más los
+        suspendidos, más 1 si hay uno ejecutandose actualmente"""
+        executing: int = 1 if self.executing is not None else 0
+        return executing + len(self.ready_queue) + len(self.suspended_queue)
 
     def execute(self) -> None:
         time: int = 0
@@ -81,6 +89,29 @@ class Scheduler:
     def advance(self) -> None:
         if self.executing is not None:
             self.executing.advance()
+
+    def _admit(self, proc: Process) -> None:
+        self.new_queue.append(proc)
+
+    def _dispatch(self, proc: Process) -> None:
+        self.executing = proc
+
+    def _timeout(self) -> None:
+        if self.executing is not None:
+            self.ready_queue.insert(0, self.executing)
+            self.executing = None
+
+    def _suspend(self) -> None:
+        if self.executing is not None:
+            self.suspended_queue.append(self.executing)
+            self.executing = None
+
+    def _activate(self, proc: Process) -> None:
+        self.ready_queue.append(proc)
+        self.suspended_queue.remove(proc)
+
+    def _release(self) -> None:
+        self.executing = None
 
 
 class Partition:
@@ -154,9 +185,6 @@ def main():
 
     mock_data = Process.random(10)
     pprint.pp(mock_data)
-
-    planner.asign(mock_data)
-    planner.execute()
 
 
 if __name__ == "__main__":
