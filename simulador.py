@@ -115,10 +115,11 @@ class Scheduler:
 
 
 class Partition:
-    def __init__(self, number: int, base: int, size: int) -> None:
-        self.number = number
-        self.base = base
-        self.size = size
+    def __init__(self, number: int, base: int, proc: Process) -> None:
+        self.number: int = number
+        self.base: int = base
+        self.size: int = proc.size
+        self.proc_id: int = proc.id
 
 
 @dataclass(frozen=True)
