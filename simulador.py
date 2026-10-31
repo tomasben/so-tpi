@@ -6,6 +6,9 @@ from itertools import count
 from random import randint
 from typing import ClassVar, Self
 
+MEMORY_START = 100
+MEMORY_SIZE = 450
+MEMORY_LIMIT = MEMORY_START + MEMORY_SIZE
 MAX_MULTIPROGRAMMING = 5
 
 

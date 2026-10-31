@@ -1,10 +1,6 @@
 import unittest
 
-from simulador import Memory, Partition
-
-MEMORY_START = 100
-MEMORY_SIZE = 450
-MEMORY_LIMIT = MEMORY_START + MEMORY_SIZE
+from simulador import MEMORY_LIMIT, MEMORY_SIZE, MEMORY_START, Memory, Partition
 
 
 def place(memory: Memory, layout: list[tuple[int, int]]) -> None:
