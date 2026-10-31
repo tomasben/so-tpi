@@ -96,36 +96,46 @@ class Scheduler:
     def submit(self, proc_list: list[Process]) -> None:
         """Registra los procesos creados en la cola de nuevos."""
         self.new_queue.extend(proc_list)
+        for proc in proc_list:
+            proc.state = ProcessState.NEW
 
     def admit(self, proc_list: list[Process]) -> None:
         """Admite nuevos procesos a la cola de listos."""
         self.ready_queue.extend(proc_list)
         self.ready_queue.sort(key=lambda x: x.remaining_time)
+        for proc in proc_list:
+            proc.state = ProcessState.READY
 
     def dispatch(self, proc: Process) -> None:
         """Ejecuta el proceso pasado por parámetro.
         Es trabajo de quien la llama asegurarse de que no haya otro proceso en ejecución."""
         self.executing = proc
+        proc.state = ProcessState.RUNNING
 
     def timeout(self) -> None:
         """Mueve el proceso actualmente en ejecución a la cabeza de la cola de listos."""
         if self.executing is not None:
             self.ready_queue.insert(0, self.executing)
+            self.executing.state = ProcessState.READY
             self.executing = None
 
     def suspend(self, proc: Process) -> None:
         """Mueve el proceso a la lista de suspendidos."""
         self.suspended_queue.append(proc)
+        proc.state = ProcessState.SUSPENDED
 
     def activate(self, proc: Process) -> None:
         """Mueve un proceso de la cola de suspendidos a listos."""
         self.ready_queue.append(proc)
         self.suspended_queue.remove(proc)
+        proc.state = ProcessState.READY
 
     def release(self) -> None:
         """Libera el proceso actualmente en ejecución.
         Es responsabilidad de quien la llama asegurarse de que haya finalizado."""
-        self.executing = None
+        if self.executing is not None:
+            self.executing.state = ProcessState.FINISHED
+            self.executing = None
 
 
 class Partition:
