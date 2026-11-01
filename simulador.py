@@ -185,7 +185,7 @@ class Memory:
 
         return None
 
-    def free(self, proc_id: int) -> Partition | None:
+    def free(self, proc_id: int) -> None:
         for part in self.partitions:
             if part.proc_id == proc_id:
                 self.partitions.remove(part)
