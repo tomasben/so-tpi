@@ -1,4 +1,5 @@
 import pprint
+from bisect import insort, insort_left
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
@@ -95,28 +96,39 @@ class Scheduler:
 
     def submit(self, proc_list: list[Process]) -> None:
         """Registra los procesos creados en la cola de nuevos."""
+        # La cola de nuevos se organiza de manera FIFO
         self.new_queue.extend(proc_list)
         for proc in proc_list:
             proc.state = ProcessState.NEW
 
-    def admit(self, proc_list: list[Process]) -> None:
-        """Admite nuevos procesos a la cola de listos."""
-        self.ready_queue.extend(proc_list)
-        self.ready_queue.sort(key=lambda x: x.remaining_time)
-        for proc in proc_list:
-            proc.state = ProcessState.READY
+    def admit(self, proc: Process) -> None:
+        """Admite nuevos procesos a la cola de listos.
+        Es responsabilidad de quien la llama asegurarse que haya cupos en el procesador."""
+        insort(self.ready_queue, proc, key=lambda x: x.remaining_time)
+        self.new_queue.remove(proc)
+        proc.state = ProcessState.READY
 
-    def dispatch(self, proc: Process) -> None:
-        """Ejecuta el proceso pasado por parámetro.
-        Es trabajo de quien la llama asegurarse de que no haya otro proceso en ejecución."""
-        self.executing = proc
-        proc.state = ProcessState.RUNNING
+    def dispatch(self) -> None:
+        """Ejecuta el proceso en la cabeza de la cola de listos.
+        Es responsabilidad de quien la llama asegurarse de que no haya otro proceso en ejecución."""
+        if len(self.ready_queue) > 0:
+            next = self.ready_queue.pop(0)
+            self.executing = next
+            next.state = ProcessState.RUNNING
 
-    def timeout(self) -> None:
-        """Mueve el proceso actualmente en ejecución a la cabeza de la cola de listos."""
+    def preempt(self) -> None:
+        if self.executing is not None and len(self.ready_queue) > 0:
+            old = self.executing
+            self.executing = self.ready_queue.pop(0)
+            self.executing.state = ProcessState.RUNNING
+            insort_left(self.ready_queue, old, key=lambda x: x.remaining_time)
+            old.state = ProcessState.READY
+
+    def suspend(self) -> None:
+        """Mueve el proceso en ejecución a la lista de suspendidos."""
         if self.executing is not None:
-            self.ready_queue.insert(0, self.executing)
-            self.executing.state = ProcessState.READY
+            self.executing.state = ProcessState.SUSPENDED
+            self.suspended_queue.insert(0, self.executing)
             self.executing = None
 
     def suspend(self, proc: Process) -> None:
@@ -125,8 +137,8 @@ class Scheduler:
         proc.state = ProcessState.SUSPENDED
 
     def activate(self, proc: Process) -> None:
-        """Mueve un proceso de la cola de suspendidos a listos."""
-        self.ready_queue.append(proc)
+        """Mueve un proceso de la cola de suspendidos a la cabeza de listos."""
+        insort_left(self.ready_queue, proc, key=lambda x: x.remaining_time)
         self.suspended_queue.remove(proc)
         proc.state = ProcessState.READY
 
