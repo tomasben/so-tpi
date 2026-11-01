@@ -61,8 +61,7 @@ class Scheduler:
 
     @property
     def mult_degree(self) -> int:
-        """Devuelve la cantidad de procesos en cola de listos, más los
-        suspendidos, más 1 si hay uno ejecutandose actualmente"""
+        """Devuelve la cantidad de procesos en cola de listos, suspendidos y en ejecución."""
         executing: int = 1 if self.executing is not None else 0
         return executing + len(self.ready_queue) + len(self.suspended_queue)
 
