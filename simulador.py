@@ -24,10 +24,11 @@ class Process:
     # Usamos un iterador para el PID autoincremental
     _id: ClassVar[Iterator[int]] = count(start=1)
 
-    def __init__(self, burst_time: int, size: int) -> None:
+    def __init__(self, burst_time: int, arrival_time: int, size: int) -> None:
         self.id: int = next(self._id)
         self.state: ProcessState = ProcessState.NEW
         self.size: int = size
+        self.arrival_time: int = arrival_time
         self.burst_time: int = burst_time
         self.remaining_time: int = burst_time
 
