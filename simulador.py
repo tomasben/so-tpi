@@ -227,13 +227,77 @@ class Memory:
     def _allocate(self, required_size: int) -> Partition | None:
         candidates = self._get_candidates(required_size)
 
-        if candidates:
-            best_gap = min(candidates, key=lambda gap: gap.size)
-            new_part = Partition(next(self._number), best_gap.base, required_size)
-            self.partitions.insert(best_gap.index, new_part)
-            return new_part
+class Simulator:
+    # TODO: Inicializar procesos dentro de Scheduler, pasados como parámetro a Simulator
+    def __init__(self, memory: Memory, scheduler: Scheduler) -> None:
+        self.memory: Memory = memory
+        self.scheduler: Scheduler = scheduler
+        self.time: int = 0
 
-        return None
+    def advance(self) -> None:
+        mock_proc: list[Process] = load_processes("test/procesos.csv")
+        pprint.pp(mock_proc)
+        arrivals = [p for p in mock_proc if p.arrival_time == self.time]
+
+        while len(mock_proc) > 0:
+            self._free_finished()
+            self._collect_arrivals(arrivals)
+            self._activate_suspended()
+            self._load_ready()
+            self._assign_cpu()
+            self._advance()
+
+    def _advance(self, units: int = 1) -> None:
+        self.scheduler.advance()
+        self.time += units
+
+    def _free_finished(self) -> None:
+        if (
+            self.scheduler.executing is not None
+            and self.scheduler.executing.is_finished
+        ):
+            self.memory.free(self.scheduler.executing.id)
+            self.scheduler.release()
+
+    def _collect_arrivals(self, arrivals: list[Process]) -> None:
+        self.scheduler.submit(arrivals)
+
+    def _activate_suspended(self) -> None:
+        for proc in self.scheduler.suspended_queue.copy():
+            res = self.memory.allocate(proc)
+            if res is not None:
+                self.scheduler.activate(proc)
+
+    def _load_ready(self) -> None:
+        for proc in self.scheduler.new_queue.copy():
+            if self.scheduler.mult_degree < 5:
+                alloc_result = self.memory.allocate(proc)
+                if alloc_result is not None:
+                    self.scheduler.admit(proc)
+            else:
+                break
+
+    def _assign_cpu(self) -> None:
+        if self.scheduler.executing is None:
+            self.scheduler.dispatch()
+        else:
+            if len(self.scheduler.ready_queue) > 0:
+                upcoming = self.scheduler.ready_queue[0]
+                current = self.scheduler.executing
+                if upcoming.remaining_time < current.remaining_time:
+                    self.scheduler.preempt()
+
+
+def load_processes(path: str) -> list[Process]:
+    with open(path, newline="", encoding="utf-8") as file:
+        return [
+            Process(
+                size=int(row["size"]),
+                arrival_time=int(row["arrival_time"]),
+                burst_time=int(row["burst_time"]),
+            )
+            for row in csv.DictReader(file)
+        ]
 
 
 def main():
