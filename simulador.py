@@ -1,16 +1,29 @@
-import pprint
+import getpass
+import os
 from bisect import insort, insort_left
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
 from itertools import count
-from random import randint
-from typing import ClassVar, Self
+from typing import ClassVar
+
+from loader import ProcessSpec
 
 MEMORY_START = 100
 MEMORY_SIZE = 450
 MEMORY_LIMIT = MEMORY_START + MEMORY_SIZE
 MAX_MULTIPROGRAMMING = 5
+
+
+# Función para obtener el nombre de usuario para la creación de procesos
+# https://docs.python.org/3/library/getpass.html#getpass.getuser
+def get_username() -> str:
+    try:
+        return getpass.getuser()
+    # Puede arrojar diferentes errores dependiendo de la plataforma y versión
+    # de python (3.13, 3.12, 3.11)
+    except (OSError, KeyError, ImportError):
+        return "usuario"
 
 
 class ProcessState(Enum):
@@ -21,36 +34,49 @@ class ProcessState(Enum):
     FINISHED = "finished"
 
 
-class Process:
-    # Usamos un iterador para el PID autoincremental
-    _id: ClassVar[Iterator[int]] = count(start=1)
+@dataclass(frozen=True)
+class Identity:
+    pid: int
+    name: str
+    # El proceso del simulador es el padre de los procesos creados
+    ppid: int = os.getpid()
+    # Primer programa de usuario en Linux
+    uid: int = 1000
+    username: str = get_username()
 
-    def __init__(self, burst_time: int, arrival_time: int, size: int) -> None:
-        self.id: int = next(self._id)
+
+class ControlInfo:
+    def __init__(self, remaining: int) -> None:
         self.state: ProcessState = ProcessState.NEW
-        self.size: int = size
-        self.arrival_time: int = arrival_time
-        self.burst_time: int = burst_time
-        self.remaining_time: int = burst_time
+        self.remaining: int = remaining
+        self.base: int | None = None
+        self.limit: int | None = None
 
-    @classmethod
-    def random(cls, count: int) -> list[Self]:
-        instances: list[Self] = [
-            cls(burst_time=randint(1, 15), size=150) for i in range(count)
-        ]
 
-        return instances
+class Metrics:
+    def __init__(self, arrival: int, burst: int) -> None:
+        self.arrival_time: int = arrival
+        self.burst_time: int = burst
+        self.admit_time: int | None = None
+        self.dispatch_time: int | None = None
+        self.finish_time: int | None = None
+        self.preemptions: int = 0
+
+
+class PCB:
+    def __init__(self, spec: ProcessSpec) -> None:
+        self.spec = spec
+        self.identity = Identity(spec.pid, spec.name)
+        self.control = ControlInfo(spec.burst_time)
+        self.metrics = Metrics(spec.arrival_time, spec.burst_time)
 
     @property
     def is_finished(self) -> bool:
-        return self.remaining_time == 0
+        return self.control.remaining == 0
 
     def advance(self) -> None:
-        if self.remaining_time >= 1:
-            self.remaining_time -= 1
-
-    def __repr__(self) -> str:
-        return f"Proceso {self.id}, TI de {self.burst_time}"
+        if self.control.remaining > 0:
+            self.control.remaining -= 1
 
 
 class Scheduler:
