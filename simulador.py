@@ -75,7 +75,9 @@ class PCB:
         if self.control.remaining > 0:
             self.control.remaining -= 1
 
-    def mark_ready(self) -> None:
+    def mark_ready(self, time: int | None = None) -> None:
+        if self.control.state == ProcessState.NEW and time is not None:
+            self.metrics.admit_time = time
         self.control.state = ProcessState.READY
 
     def mark_suspended(self) -> None:
@@ -84,16 +86,31 @@ class PCB:
     def mark_running(self) -> None:
         self.control.state = ProcessState.RUNNING
 
-    def mark_finished(self) -> None:
+    def mark_finished(self, time: int) -> None:
+        if self.metrics.finish_time is None:
+            self.metrics.finish_time = time
         self.control.state = ProcessState.FINISHED
 
 
+class Clock:
+    def __init__(self) -> None:
+        self._time: int = 0
+
+    @property
+    def now(self) -> int:
+        return self._time
+
+    def tick(self) -> None:
+        self._time += 1
+
+
 class Scheduler:
-    def __init__(self):
+    def __init__(self, clock: Clock):
         self.new_queue: list[PCB] = []
         self.ready_queue: list[PCB] = []
         self.suspended_queue: list[PCB] = []
-        self.executing: PCB | None = None
+        self.running: PCB | None = None
+        self.clock: Clock = clock
 
     @property
     def mult_degree(self) -> int:
