@@ -279,26 +279,18 @@ class Memory:
         candidates = self._get_candidates(required_size)
 
 class Simulator:
-    # TODO: Inicializar procesos dentro de Scheduler, pasados como parámetro a Simulator
-    def __init__(self, memory: Memory, scheduler: Scheduler) -> None:
-        self.memory: Memory = memory
-        self.scheduler: Scheduler = scheduler
-        self.time: int = 0
+    def __init__(self, specs: list[ProcessSpec]) -> None:
+        self.specs: list[ProcessSpec] = specs
+        self.clock: Clock = Clock()
+        self.memory: Memory = Memory()
+        self.scheduler: Scheduler = Scheduler(self.clock)
 
-    def advance(self) -> None:
-        mock_proc: list[Process] = load_processes("test/procesos.csv")
-        pprint.pp(mock_proc)
-        arrivals = [p for p in mock_proc if p.arrival_time == self.time]
-
-        while len(mock_proc) > 0:
-            self._free_finished()
-            self._collect_arrivals(arrivals)
-            self._activate_suspended()
-            self._load_ready()
-            self._assign_cpu()
-            self._advance()
-
-    def _advance(self, units: int = 1) -> None:
+    def step(self) -> None:
+        self._free_finished()
+        self._collect_arrivals()
+        self._activate_suspended()
+        self._load_ready()
+        self._assign_cpu()
         self.scheduler.advance()
         self.clock.tick()
 
@@ -337,26 +329,3 @@ class Simulator:
                 running = self.scheduler.running
                 if upcoming.control.remaining_time < running.control.remaining_time:
                     self.scheduler.preempt()
-
-
-def load_processes(path: str) -> list[Process]:
-    with open(path, newline="", encoding="utf-8") as file:
-        return [
-            Process(
-                size=int(row["size"]),
-                arrival_time=int(row["arrival_time"]),
-                burst_time=int(row["burst_time"]),
-            )
-            for row in csv.DictReader(file)
-        ]
-
-
-def main():
-    planner = Scheduler()
-
-    mock_data = Process.random(10)
-    pprint.pp(mock_data)
-
-
-if __name__ == "__main__":
-    main()
