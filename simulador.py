@@ -69,7 +69,20 @@ class PCB:
 
     @property
     def is_finished(self) -> bool:
-        return self.control.remaining == 0
+        return self.control.remaining_time == 0
+
+    @property
+    def turnaround_time(self) -> int | None:
+        if self.metrics.finish_time is None:
+            return None
+        return self.metrics.finish_time - self.spec.arrival_time
+
+    @property
+    def waiting_time(self) -> int | None:
+        turnaround = self.turnaround_time
+        if turnaround is None:
+            return None
+        return turnaround - self.spec.burst_time
 
     def advance(self) -> None:
         if self.control.remaining > 0:
