@@ -11,7 +11,6 @@ from loader import ProcessSpec
 
 MEMORY_START = 100
 MEMORY_SIZE = 450
-MEMORY_LIMIT = MEMORY_START + MEMORY_SIZE
 MAX_MULTIPROGRAMMING = 5
 
 
@@ -156,14 +155,6 @@ class Scheduler:
             self.running.mark_running()
 
     def preempt(self) -> None:
-        if self.executing is not None and len(self.ready_queue) > 0:
-            old = self.executing
-            self.executing = self.ready_queue.pop(0)
-            self.executing.mark_running()
-            if self.executing.metrics.dispatch_time is None:
-                self.executing.metrics.dispatch_time = time
-
-    def preempt(self, time: int) -> None:
         """Intercambia el proceso actualmente en ejecución por el siguiente en la cola de listos."""
         if self.running is not None and len(self.ready_queue) > 0:
             preempted = self.running
@@ -223,8 +214,8 @@ class Memory:
         self.size: int = size
         self.partitions: list[Partition] = []
 
-    def allocate(self, proc: Process) -> Partition | None:
-        candidates = self._get_candidates(proc.size)
+    def allocate(self, pcb: PCB) -> Partition | None:
+        candidates = self._get_candidates(pcb.spec.size)
 
         if candidates:
             best_gap = min(candidates, key=lambda gap: gap.size)
@@ -236,13 +227,14 @@ class Memory:
 
         return None
 
-    def free(self, proc_id: int) -> None:
-        for part in self.partitions:
-            if part.proc_id == proc_id:
-                self.partitions.remove(part)
-                return part
-
-        return None
+    def free(self, pcb: PCB) -> None:
+        """Libera la primer partición en memoria que corresponda a un proceso."""
+        # Lógica válida únicamente para organizaciones de memoria contigua.
+        for partition in self.partitions:
+            if partition.pid == pcb.identity.pid:
+                self.partitions.remove(partition)
+                pcb.control.base = None
+                pcb.control.limit = None
 
     def _get_candidates(self, required: int) -> list[Gap]:
         candidates: list[Gap] = []
@@ -275,8 +267,6 @@ class Memory:
 
         return candidates
 
-    def _allocate(self, required_size: int) -> Partition | None:
-        candidates = self._get_candidates(required_size)
 
 class Simulator:
     def __init__(self, specs: list[ProcessSpec]) -> None:
