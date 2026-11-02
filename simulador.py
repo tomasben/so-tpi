@@ -78,6 +78,18 @@ class PCB:
         if self.control.remaining > 0:
             self.control.remaining -= 1
 
+    def mark_ready(self) -> None:
+        self.control.state = ProcessState.READY
+
+    def mark_suspended(self) -> None:
+        self.control.state = ProcessState.SUSPENDED
+
+    def mark_running(self) -> None:
+        self.control.state = ProcessState.RUNNING
+
+    def mark_finished(self) -> None:
+        self.control.state = ProcessState.FINISHED
+
 
 class Scheduler:
     def __init__(self):
@@ -130,7 +142,7 @@ class Scheduler:
         Es responsabilidad de quien la llama asegurarse que haya cupos en el procesador."""
         insort(self.ready_queue, pcb, key=lambda x: x.control.remaining)
         self.new_queue.remove(pcb)
-        pcb.control.state = ProcessState.READY
+        pcb.mark_ready()
         pcb.metrics.admit_time = time
 
     def dispatch(self, time: int) -> None:
@@ -145,42 +157,41 @@ class Scheduler:
         if self.executing is not None and len(self.ready_queue) > 0:
             old = self.executing
             self.executing = self.ready_queue.pop(0)
-            self.executing.control.state = ProcessState.RUNNING
+            self.executing.mark_running()
             if self.executing.metrics.dispatch_time is None:
                 self.executing.metrics.dispatch_time = time
 
     def preempt(self, time: int) -> None:
-        """Intercambia el proceso actualmente en ejecución por el siguiente en la cola de listos.
-        Debe llamarse cuando el proceso nuevo tenga tiempo de ejecución menor que el actual."""
+        """Intercambia el proceso actualmente en ejecución por el siguiente en la cola de listos."""
         if self.executing is not None and len(self.ready_queue) > 0:
             preempted = self.executing
 
             self.executing = self.ready_queue.pop(0)
-            self.executing.control.state = ProcessState.RUNNING
+            self.executing.mark_running()
             self.executing.metrics.dispatch_time = time
             insort_left(self.ready_queue, preempted, key=lambda x: x.control.remaining)
 
-            preempted.control.state = ProcessState.READY
+            preempted.mark_ready()
             preempted.metrics.preemptions += 1
 
     def suspend(self) -> None:
         """Mueve el proceso en ejecución a la lista de suspendidos."""
         if self.executing is not None:
             self.suspended_queue.append(self.executing)
-            self.executing.control.state = ProcessState.SUSPENDED
+            self.executing.mark_suspended()
             self.executing = None
 
     def activate(self, pcb: PCB) -> None:
         """Mueve un proceso de la cola de suspendidos a la cabeza de listos."""
         insort_left(self.ready_queue, pcb, key=lambda x: x.control.remaining)
         self.suspended_queue.remove(pcb)
-        pcb.control.state = ProcessState.READY
+        pcb.mark_ready()
 
     def release(self, time: int) -> None:
         """Libera el proceso actualmente en ejecución.
         Es responsabilidad de quien la llama asegurarse de que haya finalizado."""
         if self.executing is not None:
-            self.executing.control.state = ProcessState.FINISHED
+            self.executing.mark_finished()
             self.executing.metrics.finish_time = time
             self.executing = None
 
