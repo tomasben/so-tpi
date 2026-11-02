@@ -46,9 +46,9 @@ class Identity:
 
 
 class ControlInfo:
-    def __init__(self, remaining: int) -> None:
+    def __init__(self, remaining_time: int) -> None:
         self.state: ProcessState = ProcessState.NEW
-        self.remaining: int = remaining
+        self.remaining_time: int = remaining_time
         self.base: int | None = None
         self.limit: int | None = None
 
@@ -85,8 +85,8 @@ class PCB:
         return turnaround - self.spec.burst_time
 
     def advance(self) -> None:
-        if self.control.remaining > 0:
-            self.control.remaining -= 1
+        if self.control.remaining_time > 0:
+            self.control.remaining_time -= 1
 
     def mark_ready(self, time: int | None = None) -> None:
         if self.control.state == ProcessState.NEW and time is not None:
@@ -126,59 +126,34 @@ class Scheduler:
         self.clock: Clock = clock
 
     @property
-    def mult_degree(self) -> int:
+    def multiprogramming_degree(self) -> int:
         """Devuelve la cantidad de procesos en cola de listos, suspendidos y en ejecución."""
-        executing: int = 1 if self.executing is not None else 0
-        return executing + len(self.ready_queue) + len(self.suspended_queue)
-
-    def execute(self) -> None:
-        time: int = 0
-
-        if not self.ready_queue:
-            return
-        else:
-            self.executing = self.ready_queue.pop(0)
-            print(f"Process {self.executing.id} is now executing")
-
-            while True:
-                if not self.executing.is_finished:
-                    self.executing.advance()
-                    time += 1
-
-                elif self.ready_queue:
-                    print(f"Process {self.executing.id} finished at t: {time}")
-                    self.executing = self.ready_queue.pop(0)
-                    print(f"Process {self.executing.id} is now executing")
-
-                else:
-                    print(f"Process {self.executing.id} finished at t: {time}")
-                    print("All process finished. Exiting CPU Scheduler")
-                    break
+        running: int = 1 if self.running is not None else 0
+        return running + len(self.ready_queue) + len(self.suspended_queue)
 
     def advance(self) -> None:
-        if self.executing is not None:
-            self.executing.advance()
+        if self.running is not None:
+            self.running.advance()
 
-    def submit(self, arrival_list: list[PCB]) -> None:
+    def submit(self, arrivals: list[PCB]) -> None:
         """Registra los procesos creados en la cola de nuevos."""
         # La cola de nuevos se organiza de manera FIFO
-        self.new_queue.extend(arrival_list)
+        self.new_queue.extend(arrivals)
 
-    def admit(self, pcb: PCB, time: int) -> None:
+    def admit(self, pcb: PCB) -> None:
         """Admite nuevos procesos a la cola de listos.
         Es responsabilidad de quien la llama asegurarse que haya cupos en el procesador."""
-        insort(self.ready_queue, pcb, key=lambda x: x.control.remaining)
+        insort(self.ready_queue, pcb, key=lambda x: x.control.remaining_time)
         self.new_queue.remove(pcb)
-        pcb.mark_ready()
-        pcb.metrics.admit_time = time
+        time = self.clock.now
+        pcb.mark_ready(time)
 
-    def dispatch(self, time: int) -> None:
+    def dispatch(self) -> None:
         """Ejecuta el proceso en la cabeza de la cola de listos.
         Es responsabilidad de quien la llama asegurarse de que no haya otro proceso en ejecución."""
         if len(self.ready_queue) > 0:
-            next = self.ready_queue.pop(0)
-            self.executing = next
-            next.state = ProcessState.RUNNING
+            self.running = self.ready_queue.pop(0)
+            self.running.mark_running()
 
     def preempt(self) -> None:
         if self.executing is not None and len(self.ready_queue) > 0:
@@ -190,45 +165,46 @@ class Scheduler:
 
     def preempt(self, time: int) -> None:
         """Intercambia el proceso actualmente en ejecución por el siguiente en la cola de listos."""
-        if self.executing is not None and len(self.ready_queue) > 0:
-            preempted = self.executing
+        if self.running is not None and len(self.ready_queue) > 0:
+            preempted = self.running
 
-            self.executing = self.ready_queue.pop(0)
-            self.executing.mark_running()
-            self.executing.metrics.dispatch_time = time
-            insort_left(self.ready_queue, preempted, key=lambda x: x.control.remaining)
+            self.running = self.ready_queue.pop(0)
+            self.running.mark_running()
+            insort_left(
+                self.ready_queue, preempted, key=lambda x: x.control.remaining_time
+            )
 
             preempted.mark_ready()
             preempted.metrics.preemptions += 1
 
     def suspend(self) -> None:
         """Mueve el proceso en ejecución a la lista de suspendidos."""
-        if self.executing is not None:
-            self.suspended_queue.append(self.executing)
-            self.executing.mark_suspended()
-            self.executing = None
+        if self.running is not None:
+            self.suspended_queue.append(self.running)
+            self.running.mark_suspended()
+            self.running = None
 
     def activate(self, pcb: PCB) -> None:
         """Mueve un proceso de la cola de suspendidos a la cabeza de listos."""
-        insort_left(self.ready_queue, pcb, key=lambda x: x.control.remaining)
+        insort_left(self.ready_queue, pcb, key=lambda x: x.control.remaining_time)
         self.suspended_queue.remove(pcb)
         pcb.mark_ready()
 
-    def release(self, time: int) -> None:
+    def release(self) -> None:
         """Libera el proceso actualmente en ejecución.
         Es responsabilidad de quien la llama asegurarse de que haya finalizado."""
-        if self.executing is not None:
-            self.executing.mark_finished()
-            self.executing.metrics.finish_time = time
-            self.executing = None
+        if self.running is not None:
+            time = self.clock.now
+            self.running.mark_finished(time)
+            self.running = None
 
 
 class Partition:
-    def __init__(self, number: int, base: int, proc: Process) -> None:
+    def __init__(self, number: int, base: int, pcb: PCB) -> None:
+        self.pid: int = pcb.identity.pid
         self.number: int = number
         self.base: int = base
-        self.size: int = proc.size
-        self.proc_id: int = proc.id
+        self.size: int = pcb.spec.size
 
 
 @dataclass(frozen=True)
@@ -241,9 +217,9 @@ class Gap:
 class Memory:
     _number: ClassVar[Iterator[int]] = count(start=1)
 
-    def __init__(self, size: int, start: int = 0) -> None:
+    def __init__(self, size: int = MEMORY_SIZE, start: int = MEMORY_START) -> None:
         self.start: int = start
-        self.limit: int = self.start + size
+        self.end: int = self.start + size
         self.size: int = size
         self.partitions: list[Partition] = []
 
@@ -252,9 +228,11 @@ class Memory:
 
         if candidates:
             best_gap = min(candidates, key=lambda gap: gap.size)
-            new_part = Partition(next(self._number), best_gap.base, proc)
-            self.partitions.insert(best_gap.index, new_part)
-            return new_part
+            new_partition = Partition(next(self._number), best_gap.base, pcb)
+            self.partitions.insert(best_gap.index, new_partition)
+            pcb.control.base = new_partition.base
+            pcb.control.limit = new_partition.base + new_partition.size
+            return new_partition
 
         return None
 
@@ -289,7 +267,7 @@ class Memory:
                 if inner_gap >= required:
                     candidates.append(Gap(lower_bound, inner_gap, index=i + 1))
 
-            trailing_gap = self.limit - (last.base + last.size)
+            trailing_gap = self.end - (last.base + last.size)
             if trailing_gap >= required:
                 candidates.append(
                     Gap(last.base + last.size, trailing_gap, len(self.partitions))
@@ -322,42 +300,42 @@ class Simulator:
 
     def _advance(self, units: int = 1) -> None:
         self.scheduler.advance()
-        self.time += units
+        self.clock.tick()
 
     def _free_finished(self) -> None:
-        if (
-            self.scheduler.executing is not None
-            and self.scheduler.executing.is_finished
-        ):
-            self.memory.free(self.scheduler.executing.id)
+        if self.scheduler.running is not None and self.scheduler.running.is_finished:
+            self.memory.free(self.scheduler.running)
             self.scheduler.release()
 
-    def _collect_arrivals(self, arrivals: list[Process]) -> None:
+    def _collect_arrivals(self) -> None:
+        arrivals: list[PCB] = [
+            PCB(s) for s in self.specs if s.arrival_time == self.clock.now
+        ]
         self.scheduler.submit(arrivals)
 
     def _activate_suspended(self) -> None:
-        for proc in self.scheduler.suspended_queue.copy():
-            res = self.memory.allocate(proc)
-            if res is not None:
-                self.scheduler.activate(proc)
+        for pcb in self.scheduler.suspended_queue.copy():
+            partition = self.memory.allocate(pcb)
+            if partition is not None:
+                self.scheduler.activate(pcb)
 
     def _load_ready(self) -> None:
-        for proc in self.scheduler.new_queue.copy():
-            if self.scheduler.mult_degree < 5:
-                alloc_result = self.memory.allocate(proc)
+        for pcb in self.scheduler.new_queue.copy():
+            if self.scheduler.multiprogramming_degree < MAX_MULTIPROGRAMMING:
+                alloc_result = self.memory.allocate(pcb)
                 if alloc_result is not None:
-                    self.scheduler.admit(proc)
+                    self.scheduler.admit(pcb)
             else:
                 break
 
     def _assign_cpu(self) -> None:
-        if self.scheduler.executing is None:
+        if self.scheduler.running is None:
             self.scheduler.dispatch()
         else:
             if len(self.scheduler.ready_queue) > 0:
                 upcoming = self.scheduler.ready_queue[0]
-                current = self.scheduler.executing
-                if upcoming.remaining_time < current.remaining_time:
+                running = self.scheduler.running
+                if upcoming.control.remaining_time < running.control.remaining_time:
                     self.scheduler.preempt()
 
 
