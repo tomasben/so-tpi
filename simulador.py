@@ -130,9 +130,21 @@ class Scheduler:
         running: int = 1 if self.running is not None else 0
         return running + len(self.ready_queue) + len(self.suspended_queue)
 
-    def advance(self) -> None:
+    def step(self) -> None:
         if self.running is not None:
             self.running.advance()
+
+    def schedule(self) -> None:
+        if self.running is None:
+            self.dispatch()
+        else:
+            if len(self.ready_queue) > 0:
+                upcoming = self.ready_queue[1]
+                if (
+                    upcoming.control.remaining_time
+                    < self.running.control.remaining_time
+                ):
+                    self.preempt()
 
     def submit(self, arrivals: list[PCB]) -> None:
         """Registra los procesos creados en la cola de nuevos."""
@@ -280,8 +292,8 @@ class Simulator:
         self._collect_arrivals()
         self._activate_suspended()
         self._load_ready()
-        self._assign_cpu()
-        self.scheduler.advance()
+        self.scheduler.schedule()
+        self.scheduler.step()
         self.clock.tick()
 
     def _free_finished(self) -> None:
@@ -309,13 +321,3 @@ class Simulator:
                     self.scheduler.admit(pcb)
             else:
                 break
-
-    def _assign_cpu(self) -> None:
-        if self.scheduler.running is None:
-            self.scheduler.dispatch()
-        else:
-            if len(self.scheduler.ready_queue) > 0:
-                upcoming = self.scheduler.ready_queue[0]
-                running = self.scheduler.running
-                if upcoming.control.remaining_time < running.control.remaining_time:
-                    self.scheduler.preempt()
