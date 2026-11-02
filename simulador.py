@@ -81,10 +81,10 @@ class PCB:
 
 class Scheduler:
     def __init__(self):
-        self.new_queue: list[Process] = []
-        self.ready_queue: list[Process] = []
-        self.suspended_queue: list[Process] = []
-        self.executing: Process | None = None
+        self.new_queue: list[PCB] = []
+        self.ready_queue: list[PCB] = []
+        self.suspended_queue: list[PCB] = []
+        self.executing: PCB | None = None
 
     @property
     def mult_degree(self) -> int:
@@ -120,21 +120,20 @@ class Scheduler:
         if self.executing is not None:
             self.executing.advance()
 
-    def submit(self, proc_list: list[Process]) -> None:
+    def submit(self, arrival_list: list[PCB]) -> None:
         """Registra los procesos creados en la cola de nuevos."""
         # La cola de nuevos se organiza de manera FIFO
-        self.new_queue.extend(proc_list)
-        for proc in proc_list:
-            proc.state = ProcessState.NEW
+        self.new_queue.extend(arrival_list)
 
-    def admit(self, proc: Process) -> None:
+    def admit(self, pcb: PCB, time: int) -> None:
         """Admite nuevos procesos a la cola de listos.
         Es responsabilidad de quien la llama asegurarse que haya cupos en el procesador."""
-        insort(self.ready_queue, proc, key=lambda x: x.remaining_time)
-        self.new_queue.remove(proc)
-        proc.state = ProcessState.READY
+        insort(self.ready_queue, pcb, key=lambda x: x.control.remaining)
+        self.new_queue.remove(pcb)
+        pcb.control.state = ProcessState.READY
+        pcb.metrics.admit_time = time
 
-    def dispatch(self) -> None:
+    def dispatch(self, time: int) -> None:
         """Ejecuta el proceso en la cabeza de la cola de listos.
         Es responsabilidad de quien la llama asegurarse de que no haya otro proceso en ejecución."""
         if len(self.ready_queue) > 0:
@@ -146,33 +145,43 @@ class Scheduler:
         if self.executing is not None and len(self.ready_queue) > 0:
             old = self.executing
             self.executing = self.ready_queue.pop(0)
-            self.executing.state = ProcessState.RUNNING
-            insort_left(self.ready_queue, old, key=lambda x: x.remaining_time)
-            old.state = ProcessState.READY
+            self.executing.control.state = ProcessState.RUNNING
+            if self.executing.metrics.dispatch_time is None:
+                self.executing.metrics.dispatch_time = time
+
+    def preempt(self, time: int) -> None:
+        """Intercambia el proceso actualmente en ejecución por el siguiente en la cola de listos.
+        Debe llamarse cuando el proceso nuevo tenga tiempo de ejecución menor que el actual."""
+        if self.executing is not None and len(self.ready_queue) > 0:
+            preempted = self.executing
+
+            self.executing = self.ready_queue.pop(0)
+            self.executing.control.state = ProcessState.RUNNING
+            self.executing.metrics.dispatch_time = time
+            insort_left(self.ready_queue, preempted, key=lambda x: x.control.remaining)
+
+            preempted.control.state = ProcessState.READY
+            preempted.metrics.preemptions += 1
 
     def suspend(self) -> None:
         """Mueve el proceso en ejecución a la lista de suspendidos."""
         if self.executing is not None:
-            self.executing.state = ProcessState.SUSPENDED
-            self.suspended_queue.insert(0, self.executing)
+            self.suspended_queue.append(self.executing)
+            self.executing.control.state = ProcessState.SUSPENDED
             self.executing = None
 
-    def suspend(self, proc: Process) -> None:
-        """Mueve el proceso a la lista de suspendidos."""
-        self.suspended_queue.append(proc)
-        proc.state = ProcessState.SUSPENDED
-
-    def activate(self, proc: Process) -> None:
+    def activate(self, pcb: PCB) -> None:
         """Mueve un proceso de la cola de suspendidos a la cabeza de listos."""
-        insort_left(self.ready_queue, proc, key=lambda x: x.remaining_time)
-        self.suspended_queue.remove(proc)
-        proc.state = ProcessState.READY
+        insort_left(self.ready_queue, pcb, key=lambda x: x.control.remaining)
+        self.suspended_queue.remove(pcb)
+        pcb.control.state = ProcessState.READY
 
-    def release(self) -> None:
+    def release(self, time: int) -> None:
         """Libera el proceso actualmente en ejecución.
         Es responsabilidad de quien la llama asegurarse de que haya finalizado."""
         if self.executing is not None:
-            self.executing.state = ProcessState.FINISHED
+            self.executing.control.state = ProcessState.FINISHED
+            self.executing.metrics.finish_time = time
             self.executing = None
 
 
