@@ -54,11 +54,8 @@ class ControlInfo:
 
 
 class Metrics:
-    def __init__(self, arrival: int, burst: int) -> None:
-        self.arrival_time: int = arrival
-        self.burst_time: int = burst
+    def __init__(self) -> None:
         self.admit_time: int | None = None
-        self.dispatch_time: int | None = None
         self.finish_time: int | None = None
         self.preemptions: int = 0
 
@@ -68,7 +65,7 @@ class PCB:
         self.spec = spec
         self.identity = Identity(spec.pid, spec.name)
         self.control = ControlInfo(spec.burst_time)
-        self.metrics = Metrics(spec.arrival_time, spec.burst_time)
+        self.metrics = Metrics()
 
     @property
     def is_finished(self) -> bool:
