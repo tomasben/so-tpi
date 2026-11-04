@@ -297,6 +297,7 @@ class Memory:
 class Simulator:
     def __init__(self, specs: list[ProcessSpec]) -> None:
         self.specs: list[ProcessSpec] = specs
+        self.process_table: dict[int, PCB] = {}
         self.clock: Clock = Clock()
         self.memory: Memory = Memory()
         self.scheduler: Scheduler = Scheduler(self.clock)
@@ -319,6 +320,10 @@ class Simulator:
         arrivals: list[PCB] = [
             PCB(s) for s in self.specs if s.arrival_time == self.clock.now
         ]
+
+        for pcb in arrivals:
+            self.process_table[pcb.identity.pid] = pcb
+
         self.scheduler.submit(arrivals)
 
     def _activate_suspended(self) -> None:
