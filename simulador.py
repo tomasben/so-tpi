@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
 from itertools import count
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from loader import ProcessSpec
 
@@ -301,6 +301,13 @@ class Simulator:
         self.clock: Clock = Clock()
         self.memory: Memory = Memory()
         self.scheduler: Scheduler = Scheduler(self.clock)
+
+    def get_report(self) -> dict[str, Any]:
+        report = {}
+        report["time"] = self.clock.now
+        report["process_table"] = self.process_table
+        report["memory"] = self.memory.get_report()
+        return report
 
     def step(self) -> None:
         self._free_finished()
