@@ -139,7 +139,7 @@ class Scheduler:
             self.dispatch()
         else:
             if len(self.ready_queue) > 0:
-                upcoming = self.ready_queue[1]
+                upcoming = self.ready_queue[0]
                 if (
                     upcoming.control.remaining_time
                     < self.running.control.remaining_time
