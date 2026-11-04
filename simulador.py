@@ -214,7 +214,6 @@ class Partition:
 class Gap:
     base: int
     size: int
-    index: int
 
 
 class Memory:
@@ -232,7 +231,7 @@ class Memory:
         if candidates:
             best_gap = min(candidates, key=lambda gap: gap.size)
             new_partition = Partition(next(self._number), best_gap.base, pcb)
-            self.partitions.insert(best_gap.index, new_partition)
+            insort(self.partitions, new_partition, key=lambda part: part.base)
             pcb.control.base = new_partition.base
             pcb.control.limit = new_partition.base + new_partition.size
             return new_partition
@@ -248,36 +247,51 @@ class Memory:
                 pcb.control.base = None
                 pcb.control.limit = None
 
+    def get_report(self) -> dict[str, Any]:
+        gaps: list[Gap] = self._get_gaps()
+        report = {}
+        report["gaps"] = gaps
+        report["min_gap"] = min(gaps, key=lambda gap: gap.size)
+        report["max_gap"] = max(gaps, key=lambda gap: gap.size)
+        return report
+
     def _get_candidates(self, required: int) -> list[Gap]:
         candidates: list[Gap] = []
 
         if not self.partitions:
             if self.size >= required:
-                candidates.append(Gap(self.start, self.size, 0))
+                candidates.append(Gap(self.start, self.size))
         else:
-            first = self.partitions[0]
-            last = self.partitions[-1]
+            candidates = self._get_gaps()
+            for gap in candidates:
+                if gap.size < required:
+                    candidates.remove(gap)
 
-            leading_gap = first.base - self.start
-            if leading_gap >= required:
-                candidates.append(Gap(self.start, leading_gap, 0))
+        return candidates
+
+    def _get_gaps(self) -> list[Gap]:
+        gaps: list[Gap] = []
+
+        if len(self.partitions) > 0:
+            first = self.partitions[0]
+            leading_gap = self.start - first.base
+            if leading_gap > 0:
+                gaps.append(Gap(self.start, leading_gap))
 
             for i in range(len(self.partitions) - 1):
                 lower_part = self.partitions[i]
+                lower_limit = lower_part.base + lower_part.size
                 upper_part = self.partitions[i + 1]
-                lower_bound = lower_part.base + lower_part.size
+                if lower_limit < upper_part.base:
+                    gaps.append(Gap(lower_limit, lower_limit - upper_part.base))
 
-                inner_gap = upper_part.base - lower_bound
-                if inner_gap >= required:
-                    candidates.append(Gap(lower_bound, inner_gap, index=i + 1))
+            last = self.partitions[-1]
+            last_start = last.base + last.size
+            trailing_gap = self.end - last_start
+            if trailing_gap > 0:
+                gaps.append(Gap(last_start, trailing_gap))
 
-            trailing_gap = self.end - (last.base + last.size)
-            if trailing_gap >= required:
-                candidates.append(
-                    Gap(last.base + last.size, trailing_gap, len(self.partitions))
-                )
-
-        return candidates
+        return gaps
 
 
 class Simulator:
