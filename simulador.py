@@ -67,6 +67,14 @@ class PCB:
         self.metrics = Metrics()
 
     @property
+    def is_new(self) -> bool:
+        return self.control.state == ProcessState.NEW
+
+    @property
+    def is_suspeded(self) -> bool:
+        return self.control.state == ProcessState.READY_SUSPENDED
+
+    @property
     def is_finished(self) -> bool:
         return self.control.remaining_time == 0
 
@@ -88,7 +96,7 @@ class PCB:
             self.control.remaining_time -= 1
 
     def mark_ready(self, time: int | None = None) -> None:
-        if self.control.state == ProcessState.NEW and time is not None:
+        if self.is_new and time is not None:
             self.metrics.admit_time = time
         self.control.state = ProcessState.READY
 
