@@ -159,12 +159,12 @@ class Scheduler:
         # La cola de nuevos se organiza de manera FIFO
         self.new_queue.extend(arrivals)
 
-    def admit(self, pcb: PCB) -> None:
+    def admit(self, selected: PCB) -> None:
         """Admite nuevos procesos a la cola de listos, una vez cargados en memoria.
         Es responsabilidad de quien la llama asegurarse de que no se supere el grado de multiprogramación."""
-        insort(self.ready_queue, pcb, key=lambda x: x.control.remaining_time)
-        self.new_queue.remove(pcb)
-        pcb.mark_ready(self.clock.now)
+        insort(self.ready_queue, selected, key=lambda x: x.control.remaining_time)
+        self.new_queue.remove(selected)
+        selected.mark_ready(self.clock.now)
 
     def dispatch(self) -> None:
         """Ejecuta el proceso en la cabeza de la cola de listos.
@@ -187,19 +187,19 @@ class Scheduler:
             preempted.mark_ready()
             preempted.metrics.preemptions += 1
 
-    def suspend(self, pcb: PCB) -> None:
+    def suspend(self, selected: PCB) -> None:
         """Mueve un proceso a la cola de listos/suspendidos.
         Es responsabilidad de quien la llama asegurarse de liberar la partición de la memoria."""
-        self.ready_suspended_queue.append(pcb)
-        self.new_queue.remove(pcb)
-        pcb.mark_ready_suspended()
+        self.ready_suspended_queue.append(selected)
+        self.new_queue.remove(selected)
+        selected.mark_ready_suspended()
 
-    def activate(self, pcb: PCB) -> None:
+    def activate(self, selected: PCB) -> None:
         """Mueve un proceso de la cola de listos/suspendidos a la cola de listos.
         Es responsabilidad de quien la llama asegurarse de se le haya asignado una partición en memoria."""
-        insort_left(self.ready_queue, pcb, key=lambda x: x.control.remaining_time)
-        self.ready_suspended_queue.remove(pcb)
-        pcb.mark_ready()
+        insort_left(self.ready_queue, selected, key=lambda x: x.control.remaining_time)
+        self.ready_suspended_queue.remove(selected)
+        selected.mark_ready()
 
     def release(self) -> None:
         """Libera el proceso actualmente en ejecución.
@@ -354,8 +354,8 @@ class Simulator:
         # Se asignan los procesos que quepan en memoria, buscando por órden de llegada
         for pcb in self.scheduler.new_queue.copy():
             if self.scheduler.multiprogramming_degree < MAX_MULTIPROGRAMMING:
-                alloc_result = self.memory.allocate(pcb)
-                if alloc_result is not None:
+                partition = self.memory.allocate(pcb)
+                if partition is not None:
                     self.scheduler.admit(pcb)
                 else:
                     self.scheduler.suspend(pcb)
