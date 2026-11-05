@@ -209,6 +209,10 @@ class Partition:
         self.base: int = base
         self.size: int = pcb.spec.size
 
+    @property
+    def limit(self) -> int:
+        return self.base + self.size
+
 
 @dataclass(frozen=True)
 class Gap:
@@ -233,7 +237,7 @@ class Memory:
             new_partition = Partition(next(self._number), best_gap.base, pcb)
             insort(self.partitions, new_partition, key=lambda part: part.base)
             pcb.control.base = new_partition.base
-            pcb.control.limit = new_partition.base + new_partition.size
+            pcb.control.limit = new_partition.limit
             return new_partition
 
         return None
@@ -280,16 +284,16 @@ class Memory:
 
             for i in range(len(self.partitions) - 1):
                 lower_part = self.partitions[i]
-                lower_limit = lower_part.base + lower_part.size
                 upper_part = self.partitions[i + 1]
-                if lower_limit < upper_part.base:
-                    gaps.append(Gap(lower_limit, lower_limit - upper_part.base))
+                if lower_part.limit < upper_part.base:
+                    gaps.append(
+                        Gap(lower_part.limit, lower_part.limit - upper_part.base)
+                    )
 
             last = self.partitions[-1]
-            last_start = last.base + last.size
-            trailing_gap = self.end - last_start
+            trailing_gap = self.end - last.limit
             if trailing_gap > 0:
-                gaps.append(Gap(last_start, trailing_gap))
+                gaps.append(Gap(last.limit, trailing_gap))
 
         return gaps
 
