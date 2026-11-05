@@ -19,8 +19,8 @@ MAX_MULTIPROGRAMMING = 5
 def get_username() -> str:
     try:
         return getpass.getuser()
-    # Puede arrojar diferentes errores dependiendo de la plataforma y versión
-    # de python (3.13, 3.12, 3.11)
+    # Puede arrojar diferentes errores dependiendo de la plataforma
+    # y versión de python (3.13, 3.12, 3.11)
     except (OSError, KeyError, ImportError):
         return "usuario"
 
@@ -28,7 +28,7 @@ def get_username() -> str:
 class ProcessState(Enum):
     NEW = "new"
     READY = "ready"
-    SUSPENDED = "ready/suspended"
+    READY_SUSPENDED = "ready/suspended"
     RUNNING = "running"
     FINISHED = "finished"
 
@@ -92,8 +92,8 @@ class PCB:
             self.metrics.admit_time = time
         self.control.state = ProcessState.READY
 
-    def mark_suspended(self) -> None:
-        self.control.state = ProcessState.SUSPENDED
+    def mark_ready_suspended(self) -> None:
+        self.control.state = ProcessState.READY_SUSPENDED
 
     def mark_running(self) -> None:
         self.control.state = ProcessState.RUNNING
@@ -120,7 +120,7 @@ class Scheduler:
     def __init__(self, clock: Clock):
         self.new_queue: list[PCB] = []
         self.ready_queue: list[PCB] = []
-        self.suspended_queue: list[PCB] = []
+        self.ready_suspended_queue: list[PCB] = []
         self.running: PCB | None = None
         self.clock: Clock = clock
 
@@ -128,7 +128,7 @@ class Scheduler:
     def multiprogramming_degree(self) -> int:
         """Devuelve la cantidad de procesos en cola de listos, suspendidos y en ejecución."""
         running: int = 1 if self.running is not None else 0
-        return running + len(self.ready_queue) + len(self.suspended_queue)
+        return running + len(self.ready_queue) + len(self.ready_suspended_queue)
 
     def step(self) -> None:
         if self.running is not None:
@@ -152,8 +152,8 @@ class Scheduler:
         self.new_queue.extend(arrivals)
 
     def admit(self, pcb: PCB) -> None:
-        """Admite nuevos procesos a la cola de listos.
-        Es responsabilidad de quien la llama asegurarse que haya cupos en el procesador."""
+        """Admite nuevos procesos a la cola de listos, una vez cargados en memoria.
+        Es responsabilidad de quien la llama asegurarse de que no se supere el grado de multiprogramación."""
         insort(self.ready_queue, pcb, key=lambda x: x.control.remaining_time)
         self.new_queue.remove(pcb)
         pcb.mark_ready(self.clock.now)
@@ -179,17 +179,18 @@ class Scheduler:
             preempted.mark_ready()
             preempted.metrics.preemptions += 1
 
-    def suspend(self) -> None:
-        """Mueve el proceso en ejecución a la lista de suspendidos."""
-        if self.running is not None:
-            self.suspended_queue.append(self.running)
-            self.running.mark_suspended()
-            self.running = None
+    def suspend(self, pcb: PCB) -> None:
+        """Mueve un proceso a la cola de listos/suspendidos.
+        Es responsabilidad de quien la llama asegurarse de liberar la partición de la memoria."""
+        self.ready_suspended_queue.append(pcb)
+        self.new_queue.remove(pcb)
+        pcb.mark_ready_suspended()
 
     def activate(self, pcb: PCB) -> None:
-        """Mueve un proceso de la cola de suspendidos a la cabeza de listos."""
+        """Mueve un proceso de la cola de listos/suspendidos a la cola de listos.
+        Es responsabilidad de quien la llama asegurarse de se le haya asignado una partición en memoria."""
         insort_left(self.ready_queue, pcb, key=lambda x: x.control.remaining_time)
-        self.suspended_queue.remove(pcb)
+        self.ready_suspended_queue.remove(pcb)
         pcb.mark_ready()
 
     def release(self) -> None:
@@ -315,7 +316,7 @@ class Simulator:
         self._free_finished()
         self._collect_arrivals()
         self._activate_suspended()
-        self._load_ready()
+        self._load_new()
         self.scheduler.schedule()
         self.scheduler.step()
         self.clock.tick()
@@ -336,16 +337,19 @@ class Simulator:
         self.scheduler.submit(arrivals)
 
     def _activate_suspended(self) -> None:
-        for pcb in self.scheduler.suspended_queue.copy():
+        for pcb in self.scheduler.ready_suspended_queue.copy():
             partition = self.memory.allocate(pcb)
             if partition is not None:
                 self.scheduler.activate(pcb)
 
-    def _load_ready(self) -> None:
+    def _load_new(self) -> None:
+        # Se asignan los procesos que quepan en memoria, buscando por órden de llegada
         for pcb in self.scheduler.new_queue.copy():
             if self.scheduler.multiprogramming_degree < MAX_MULTIPROGRAMMING:
                 alloc_result = self.memory.allocate(pcb)
                 if alloc_result is not None:
                     self.scheduler.admit(pcb)
+                else:
+                    self.scheduler.suspend(pcb)
             else:
                 break
