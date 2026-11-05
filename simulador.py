@@ -156,8 +156,7 @@ class Scheduler:
         Es responsabilidad de quien la llama asegurarse que haya cupos en el procesador."""
         insort(self.ready_queue, pcb, key=lambda x: x.control.remaining_time)
         self.new_queue.remove(pcb)
-        time = self.clock.now
-        pcb.mark_ready(time)
+        pcb.mark_ready(self.clock.now)
 
     def dispatch(self) -> None:
         """Ejecuta el proceso en la cabeza de la cola de listos.
@@ -197,8 +196,7 @@ class Scheduler:
         """Libera el proceso actualmente en ejecución.
         Es responsabilidad de quien la llama asegurarse de que haya finalizado."""
         if self.running is not None:
-            time = self.clock.now
-            self.running.mark_finished(time)
+            self.running.mark_finished(self.clock.now)
             self.running = None
 
 
