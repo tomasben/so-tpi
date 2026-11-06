@@ -284,7 +284,7 @@ class Memory:
 
         if len(self.partitions) > 0:
             first = self.partitions[0]
-            leading_gap = self.start - first.base
+            leading_gap = first.base - self.start
             if leading_gap > 0:
                 gaps.append(Gap(self.start, leading_gap))
 
@@ -293,7 +293,7 @@ class Memory:
                 upper_part = self.partitions[i + 1]
                 if lower_part.limit < upper_part.base:
                     gaps.append(
-                        Gap(lower_part.limit, lower_part.limit - upper_part.base)
+                        Gap(lower_part.limit, upper_part.base - lower_part.limit)
                     )
 
             last = self.partitions[-1]
