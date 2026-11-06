@@ -71,7 +71,7 @@ class PCB:
         return self.control.state == ProcessState.NEW
 
     @property
-    def is_suspeded(self) -> bool:
+    def is_suspended(self) -> bool:
         return self.control.state == ProcessState.READY_SUSPENDED
 
     @property
