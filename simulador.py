@@ -96,7 +96,7 @@ class PCB:
             self.control.remaining_time -= 1
 
     def mark_ready(self, time: int | None = None) -> None:
-        if self.is_new and time is not None:
+        if self.metrics.admit_time is None and time is not None:
             self.metrics.admit_time = time
         self.control.state = ProcessState.READY
 
