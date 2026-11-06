@@ -14,6 +14,56 @@ MEMORY_SIZE = 450
 MAX_MULTIPROGRAMMING = 5
 
 
+class Clock:
+    def __init__(self) -> None:
+        self._time: int = 0
+
+    @property
+    def now(self) -> int:
+        return self._time
+
+    def tick(self) -> None:
+        self._time += 1
+
+
+class EventTy(Enum):
+    Arrival = "arrival"
+    Admission = "admission"
+    Suspension = "suspension"
+    Activation = "activation"
+    Dispatch = "dispatch"
+    Finalization = "finalization"
+
+
+EVENT_MESSAGE: dict[EventTy, str] = {
+    EventTy.Arrival: "arriba",
+    EventTy.Admission: "Nuevo -> Listos",
+    EventTy.Suspension: "Nuevo -> Listos/Susp.",
+    EventTy.Activation: "Listos/Susp. -> Listos",
+    EventTy.Dispatch: "Listos -> Ejecución",
+    EventTy.Finalization: "termina",
+}
+
+
+@dataclass(frozen=True)
+class Event:
+    time: int
+    pid: int
+    type: EventTy
+    message: str
+
+
+class EventLogger:
+    def __init__(self, clock: Clock) -> None:
+        self.clock = clock
+        self.events: list[Event] = []
+
+    def add(self, type: EventTy, pid: int) -> None:
+        self.events.append(
+            Event(time=self.clock.now, pid=pid, type=type, message=EVENT_MESSAGE[type])
+        )
+
+
 # Función para obtener el nombre de usuario para la creación de procesos
 # https://docs.python.org/3/library/getpass.html#getpass.getuser
 def get_username() -> str:
@@ -56,7 +106,6 @@ class Metrics:
     def __init__(self) -> None:
         self.admit_time: int | None = None
         self.finish_time: int | None = None
-        self.preemptions: int = 0
 
 
 class PCB:
@@ -112,25 +161,14 @@ class PCB:
         self.control.state = ProcessState.FINISHED
 
 
-class Clock:
-    def __init__(self) -> None:
-        self._time: int = 0
-
-    @property
-    def now(self) -> int:
-        return self._time
-
-    def tick(self) -> None:
-        self._time += 1
-
-
 class Scheduler:
-    def __init__(self, clock: Clock):
+    def __init__(self, clock: Clock, logger: EventLogger):
         self.new_queue: list[PCB] = []
         self.ready_queue: list[PCB] = []
         self.ready_suspended_queue: list[PCB] = []
         self.running: PCB | None = None
         self.clock: Clock = clock
+        self.logger: EventLogger = logger
 
     @property
     def multiprogramming_degree(self) -> int:
@@ -158,6 +196,8 @@ class Scheduler:
         """Registra los procesos creados en la cola de nuevos."""
         # La cola de nuevos se organiza de manera FIFO
         self.new_queue.extend(arrivals)
+        for pcb in arrivals:
+            self.logger.add(EventTy.Arrival, pcb.spec.pid)
 
     def admit(self, selected: PCB) -> None:
         """Admite nuevos procesos a la cola de listos, una vez cargados en memoria.
@@ -165,6 +205,7 @@ class Scheduler:
         insort(self.ready_queue, selected, key=lambda x: x.control.remaining_time)
         self.new_queue.remove(selected)
         selected.mark_ready(self.clock.now)
+        self.logger.add(EventTy.Admission, selected.spec.pid)
 
     def dispatch(self) -> None:
         """Ejecuta el proceso en la cabeza de la cola de listos.
@@ -172,27 +213,30 @@ class Scheduler:
         if len(self.ready_queue) > 0:
             self.running = self.ready_queue.pop(0)
             self.running.mark_running()
+            self.logger.add(EventTy.Dispatch, self.running.spec.pid)
 
     def preempt(self) -> None:
         """Intercambia el proceso actualmente en ejecución por el siguiente en la cola de listos."""
         if self.running is not None and len(self.ready_queue) > 0:
-            preempted = self.running
-
+            evicted = self.running
             self.running = self.ready_queue.pop(0)
             self.running.mark_running()
             insort_left(
-                self.ready_queue, preempted, key=lambda x: x.control.remaining_time
+                self.ready_queue, evicted, key=lambda x: x.control.remaining_time
             )
-
-            preempted.mark_ready()
-            preempted.metrics.preemptions += 1
+            evicted.mark_ready()
+            self.logger.add(
+                EventTy.Dispatch,
+                self.running.spec.pid,
+            )
 
     def suspend(self, selected: PCB) -> None:
         """Mueve un proceso a la cola de listos/suspendidos.
-        Es responsabilidad de quien la llama asegurarse de liberar la partición de la memoria."""
+        Es responsabilidad de quien la llama asegurarse de liberar la partición de la memoria, en caso de tenerla."""
         self.ready_suspended_queue.append(selected)
         self.new_queue.remove(selected)
         selected.mark_ready_suspended()
+        self.logger.add(EventTy.Suspension, selected.spec.pid)
 
     def activate(self, selected: PCB) -> None:
         """Mueve un proceso de la cola de listos/suspendidos a la cola de listos.
@@ -200,12 +244,14 @@ class Scheduler:
         insort_left(self.ready_queue, selected, key=lambda x: x.control.remaining_time)
         self.ready_suspended_queue.remove(selected)
         selected.mark_ready()
+        self.logger.add(EventTy.Activation, selected.spec.pid)
 
     def release(self) -> None:
         """Libera el proceso actualmente en ejecución.
         Es responsabilidad de quien la llama asegurarse de que haya finalizado."""
         if self.running is not None:
             self.running.mark_finished(self.clock.now)
+            self.logger.add(EventTy.Finalization, self.running.spec.pid)
             self.running = None
 
 
@@ -306,11 +352,12 @@ class Memory:
 
 class Simulator:
     def __init__(self, specs: list[ProcessSpec]) -> None:
+        self.clock: Clock = Clock()
+        self.logger: EventLogger = EventLogger(self.clock)
         self.specs: list[ProcessSpec] = specs
         self.process_table: dict[int, PCB] = {}
-        self.clock: Clock = Clock()
         self.memory: Memory = Memory()
-        self.scheduler: Scheduler = Scheduler(self.clock)
+        self.scheduler: Scheduler = Scheduler(self.clock, self.logger)
 
     def get_report(self) -> dict[str, Any]:
         report = {}
