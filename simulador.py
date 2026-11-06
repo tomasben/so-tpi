@@ -263,8 +263,8 @@ class Memory:
         gaps: list[Gap] = self._get_gaps()
         report = {}
         report["gaps"] = gaps
-        report["min_gap"] = min(gaps, key=lambda gap: gap.size)
-        report["max_gap"] = max(gaps, key=lambda gap: gap.size)
+        report["min_gap"] = min(gaps, key=lambda gap: gap.size, default=None)
+        report["max_gap"] = max(gaps, key=lambda gap: gap.size, default=None)
         return report
 
     def _get_candidates(self, required: int) -> list[Gap]:
