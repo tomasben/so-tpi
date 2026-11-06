@@ -273,10 +273,8 @@ class Memory:
             if self.size >= required:
                 candidates.append(Gap(self.start, self.size))
         else:
-            candidates = self._get_gaps()
-            for gap in candidates:
-                if gap.size < required:
-                    candidates.remove(gap)
+            gaps = self._get_gaps()
+            candidates = [g for g in gaps if g.size >= required]
 
         return candidates
 
