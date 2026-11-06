@@ -257,6 +257,7 @@ class Memory:
                 self.partitions.remove(partition)
                 pcb.control.base = None
                 pcb.control.limit = None
+                break
 
     def get_report(self) -> dict[str, Any]:
         gaps: list[Gap] = self._get_gaps()
