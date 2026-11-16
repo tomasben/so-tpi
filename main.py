@@ -6,7 +6,11 @@ from loader import ProcessSpec
 from simulador import MAX_LOADED_PROCESSES, USER_SPACE_SIZE, Simulator
 from style import GRAY, ORANGE, PADDING, RESET, YELLOW
 
-options = ["Cargar desde archivo .csv", "Usar archivo de ejemplo"]
+options = [
+    "Cargar desde archivo .csv",
+    "Usar archivo de ejemplo",
+    "Salir del simulador",
+]
 
 # Ruta para poder incluir archivo de prueba en los binarios
 test_file_route = Path(__file__).resolve().parent / "prueba" / "procesos.csv"
@@ -35,27 +39,59 @@ def get_selection() -> int:
         print(f"{PADDING}{ORANGE}ERROR: {error}{RESET}")
 
 
-def get_path() -> Path:
+def get_path() -> Path | None:
     while True:
-        option = input(f"\n{PADDING}{YELLOW}Ruta del archivo 🞂 {RESET}")
+        print(f"\n{PADDING}Ingresá la ruta del archivo .csv")
+        print(f"{PADDING}[3] Volver al menú principal")
+        print(f"{PADDING}[4] Salir del simulador")
+
+        option = input(
+            f"\n{PADDING}{YELLOW}Ruta u Opción 🞂 {RESET}"
+        ).strip()
+
+        if option == "3":
+            return None
+
+        if option == "4":
+            print(f"\n{PADDING}{GRAY}Saliendo del simulador...{RESET}")
+            raise SystemExit(0)
+
+        if not option:
+            print(f"{PADDING}{ORANGE}ERROR: La ruta no puede estar vacía.{RESET}")
+            continue
+
         route = Path(option)
-        if route.exists():
+
+        if route.is_file():
             return route
-        print(f"{PADDING}{ORANGE}ERROR: Ingresá una ruta válida{RESET}")
+
+        print(f"{PADDING}{ORANGE}ERROR: Ingresá una ruta válida.{RESET}")
 
 
 def load_specs() -> list[ProcessSpec]:
-    cli.clear()
-    cli.draw_banner()
-    print()
-    print_options()
-    selection = get_selection()
+    while True:
+        cli.clear()
+        cli.draw_banner()
+        print()
+        print_options()
 
-    if selection == 1:
-        path = get_path()
-    else:
-        path = test_file_route
-    return loader.read_specs_from_file(path, amount=MAX_LOADED_PROCESSES)
+        selection = get_selection()
+
+        if selection == 3:
+            print(f"\n{PADDING}{GRAY}Saliendo del simulador...{RESET}")
+            raise SystemExit(0)
+
+        if selection == 1:
+            path = get_path()
+
+            if path is None:
+                continue
+        else:
+            path = test_file_route
+
+        return loader.read_specs_from_file(
+            path, amount=MAX_LOADED_PROCESSES
+        )
 
 
 def run_simulation(simulator: Simulator) -> None:
